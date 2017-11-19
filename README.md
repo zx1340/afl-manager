@@ -1,2 +1,3 @@
 # afl-manager
-Python web server used to manager multi-afl-fuzzer
+- Manager multi-afl by python server
+https://zx1340.wordpress.com/2017/11/19/afl-manager/
