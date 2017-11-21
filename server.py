@@ -8,8 +8,10 @@ import subprocess
 import argparse
 import glob
 import BaseHTTPServer
+from SimpleHTTPServer import SimpleHTTPRequestHandler
 import ntpath
 import datetime
+import base64
 
 HOST_NAME = '0.0.0.0'
 PORT_NUMBER = 1340
@@ -269,41 +271,66 @@ class Afl():
         return ret
 
 #Simple Http server reponse get
-class MyHandler(BaseHTTPServer.BaseHTTPRequestHandler):
+class MyHandler(SimpleHTTPRequestHandler):
     def do_HEAD(s):
         s.send_response(200)
         s.send_header("Content-type", "text/html")
         s.end_headers()
+    
+    def do_AUTHHEAD(s):
+        s.send_response(401)
+        s.send_header('WWW-Authenticate', 'Basic realm=\"Test\"')
+        s.send_header('Content-type', 'text/html')
+        s.end_headers()
+
     def do_GET(s):
         """Respond to a GET request."""
-        if s.path == "/source.css":
-            f = open('source.css')
-            s.send_response(200)
-            s.send_header('Content-type', 'text/css')
-            s.end_headers()
-            s.wfile.write(f.read())
-            f.close()
-            return
-
-        if s.path.endswith('.info'):
-            s.send_response(200)
-            s.send_header("Content-type", "text/html")
-            s.end_headers()
-            try:
-                fz_dir = int(s.path[1:-5])
-            except:
-                s.wfile.write("<h1>There is nothing here</h1>")
+        #authencation check
+        if s.headers.getheader('Authorization') == None:
+            s.do_AUTHHEAD()
+            s.wfile.write('no auth header received')
+            pass
+        
+        elif s.headers.getheader('Authorization') == 'Basic '+key:
+            #SimpleHTTPRequestHandler.do_GET(s)
+            #pass
+            if s.path == "/source.css":
+                f = open('source.css')
+                s.send_response(200)
+                s.send_header('Content-type', 'text/css')
+                s.end_headers()
+                s.wfile.write(f.read())
+                f.close()
                 return
 
-            s.wfile.write(crash_start)
-            for afl in lafl:
-                if fz_dir == afl.fuzzer_pid:
-                    s.wfile.write('<h1 onclick="window.history.go(-1); return false;">' + afl.path.split('/')[-2] + '</h1>')
-                    s.wfile.write(afl.get_crash_info())
-                    s.wfile.write(web_end)
+            if s.path.endswith('.info'):
+                s.send_response(200)
+                s.send_header("Content-type", "text/html")
+                s.end_headers()
+                try:
+                    fz_dir = int(s.path[1:-5])
+                except:
+                    s.wfile.write("<h1>There is nothing here</h1>")
                     return
-            s.wfile.write("<h1>There is nothing here</h1>")
-            return
+
+                s.wfile.write(crash_start)
+                for afl in lafl:
+                    if fz_dir == afl.fuzzer_pid:
+                        s.wfile.write('<h1 onclick="window.history.go(-1); return false;">' + afl.path.split('/')[-2] + '</h1>')
+                        s.wfile.write(afl.get_crash_info())
+                        s.wfile.write(web_end)
+                        return
+                s.wfile.write("<h1>There is nothing here</h1>")
+                return
+        
+        else:
+            s.do_AUTHHEAD()
+            s.wfile.write(s.headers.getheader('Authorization'))
+            s.wfile.write('not authenticated')
+            pass
+
+
+        
 
         s.send_response(200)
         s.send_header("Content-type", "text/html")
@@ -320,11 +347,13 @@ class MyHandler(BaseHTTPServer.BaseHTTPRequestHandler):
 parser = argparse.ArgumentParser(description='AFL Manager')
 parser.add_argument('-i', action="store", dest="source", required=True, help='Parent directory of AFL')
 parser.add_argument('-b', action="store", dest="binary", required=False,help="binary ")
+parser.add_argument('-a', action="store", dest="authen", required=True,help="Authencation user:pass")
 args = parser.parse_args()
 
 source = args.source
 cmd = args.binary if args.binary else None
 
+key = base64.b64encode(args.authen)
 
 if not cmd:
     print("[*]No input binary, using afl info at default")
