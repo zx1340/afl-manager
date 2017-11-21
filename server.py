@@ -277,7 +277,7 @@ class MyHandler(BaseHTTPServer.BaseHTTPRequestHandler):
     def do_GET(s):
         """Respond to a GET request."""
         if s.path == "/source.css":
-            f = open('./' + s.path)
+            f = open('source.css')
             s.send_response(200)
             s.send_header('Content-type', 'text/css')
             s.end_headers()
@@ -289,7 +289,12 @@ class MyHandler(BaseHTTPServer.BaseHTTPRequestHandler):
             s.send_response(200)
             s.send_header("Content-type", "text/html")
             s.end_headers()
-            fz_dir = int(s.path[1:-5])
+            try:
+                fz_dir = int(s.path[1:-5])
+            except:
+                s.wfile.write("<h1>There is nothing here</h1>")
+                return
+
             s.wfile.write(crash_start)
             for afl in lafl:
                 if fz_dir == afl.fuzzer_pid:
@@ -297,7 +302,7 @@ class MyHandler(BaseHTTPServer.BaseHTTPRequestHandler):
                     s.wfile.write(afl.get_crash_info())
                     s.wfile.write(web_end)
                     return
-            s.wfile.write("There is nothing here")
+            s.wfile.write("<h1>There is nothing here</h1>")
             return
 
         s.send_response(200)
