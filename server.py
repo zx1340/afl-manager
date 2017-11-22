@@ -26,6 +26,7 @@ web_start ="""
 <body>
 <h1><span class="blue">&lt;</span>AFL<span class="blue">&gt;</span> <span class="yellow">MANAGER</pan></h1>
 <h2></h2>
+<th><h1><a href='crashes'>ALL CRASH</a></h1></th>
 
 <table class="container">
   <thead>
@@ -59,7 +60,6 @@ crash_start = """
 <body>
 <h1><span class="blue">&lt;</span>AFL<span class="blue">&gt;</span> <span class="yellow">MANAGER</pan></h1>
 <h2></h2>
-
 <table class="container">
   <thead>
     <tr>
@@ -69,6 +69,29 @@ crash_start = """
     </tr>
   </thead>
   <tbody>
+"""
+
+all_crash_start= """
+<head>
+  <title>AFL manager</title>
+  <link rel="stylesheet" type="text/css" href="source.css">
+
+</head>
+<body>
+<h1><span class="blue">&lt;</span>AFL<span class="blue">&gt;</span> <span class="yellow">MANAGER</pan></h1>
+<h2></h2>
+<table class="container">
+  <thead>
+    <tr>
+      <th><h1>Client Name</h1></th>
+      <th><h1>Created Time</h1></th>
+      <th><h1>File Name</h1></th>
+      <th><h1>Info</h1></th>
+    </tr>
+  </thead>
+  <tbody>
+
+
 """
 
 def to_time(t):
@@ -249,7 +272,7 @@ class Afl():
                 if not self.crash or fname not in [t[0] for t in self.crash.values()]:
                     print ">",fname
                     command = Command(self.cmd,fname)
-                    command.run(timeout = 0.3)
+                    command.run(timeout = 1)
                     if not command.timeout:
                         if not command.error and not command.result:
                             self.crash[os.path.getmtime(fname)] = (fname,"Unknow segmentation fault")
@@ -262,13 +285,22 @@ class Afl():
                     else:
                         self.crash[os.path.getmtime(fname)] = (fname,"Timeout")
 
+    def get_full_crash_info(self):
+        self.update_crash_info()
+        ret = ''
+        for crs in sorted(self.crash, reverse=True):
+            #if self.crash[crs][1] != 'Timeout' and self.crash[crs][1] !=  'No crash':
+            ret += "<tr><td>%s</td><td>%s</td><td>%s</td></tr>" % (to_time(crs),ntpath.basename(self.crash[crs][0]),self.crash[crs][1])
+        return ret
     def get_crash_info(self):
         self.update_crash_info()
         ret = ''
         for crs in sorted(self.crash, reverse=True):
             if self.crash[crs][1] != 'Timeout' and self.crash[crs][1] !=  'No crash':
-                ret += "<tr><td>%s</td><td>%s</td><td>%s</td></tr>" % (to_time(crs),ntpath.basename(self.crash[crs][0]),self.crash[crs][1])
+                ret += "<tr><td>%s</td><td>%s</td><td>%s</td><td>%s</td></tr>" % (self.path.split('/')[-2],to_time(crs),ntpath.basename(self.crash[crs][0]),self.crash[crs][1])
         return ret
+
+
 
 #Simple Http server reponse get
 class MyHandler(SimpleHTTPRequestHandler):
@@ -302,6 +334,18 @@ class MyHandler(SimpleHTTPRequestHandler):
                 s.wfile.write(f.read())
                 f.close()
                 return
+            if s.path == '/crashes':
+                s.send_response(200)
+                s.send_header("Content-type", "text/html")
+                s.end_headers()
+                s.wfile.write(all_crash_start)
+
+                s.wfile.write('<h1 onclick="window.history.go(-1); return false;">' + 'HOME' + '</h1>')
+
+                for afl in lafl:
+                    s.wfile.write(afl.get_crash_info())
+                    s.wfile.write(web_end)
+                return
 
             if s.path.endswith('.info'):
                 s.send_response(200)
@@ -317,7 +361,7 @@ class MyHandler(SimpleHTTPRequestHandler):
                 for afl in lafl:
                     if fz_dir == afl.fuzzer_pid:
                         s.wfile.write('<h1 onclick="window.history.go(-1); return false;">' + afl.path.split('/')[-2] + '</h1>')
-                        s.wfile.write(afl.get_crash_info())
+                        s.wfile.write(afl.get_full_crash_info())
                         s.wfile.write(web_end)
                         return
                 s.wfile.write("<h1>There is nothing here</h1>")
