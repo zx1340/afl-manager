@@ -101,6 +101,7 @@ def current_time():
     return str(repr(time.time()))
 
 
+
 #$python asd.py -> kill process contain asd.py
 def kill_process(fname):
     prcid = []
@@ -154,7 +155,9 @@ class Command(object):
                     self.crash_fname = current_time() +  get_error_name(error) + '.txt'
                 else:# 'Assertion failed' in error:
                     self.crash_fname = '_'.join(self.error.split())
-
+                
+                #No need notify
+                #send_notify(self.crash_fname)
 
         thread = threading.Thread(target=target)
         thread.start()
@@ -260,7 +263,7 @@ class Afl():
         last_crash = l_crs(self.last_update - self.last_crash) if self.last_crash  else 'Not yet'
         name = self.path.split('/')[-2]
         #5 min no update mean stopped 
-        status = '[Running]' if (int(time.time()  - self.last_update)) < 300 else '[Stopped]'
+        status = '[Running]' if (int(time.time()  - self.last_update)) < 300 else '<font color="red">[STOPPED]</font>'
         return ("<tr><td>%s</td><td>%s</td><td>%s</td><td>%s</td><td>%s</td><td>%s</td><td>%s</td><td><a href='%s.info'>View</a></td></tr>"\
                     %(name,runtime,self.execs_per_sec,self.unique_crashes,last_crash, self.paths_total, status,self.fuzzer_pid) )
 
@@ -281,7 +284,6 @@ class Afl():
                                 self.crash[os.path.getmtime(fname)] = (fname,command.crash_fname)
                             else:
                                 self.crash[os.path.getmtime(fname)] = (fname,"No crash")
-
                     else:
                         self.crash[os.path.getmtime(fname)] = (fname,"Timeout")
 
@@ -292,15 +294,14 @@ class Afl():
             #if self.crash[crs][1] != 'Timeout' and self.crash[crs][1] !=  'No crash':
             ret += "<tr><td>%s</td><td>%s</td><td>%s</td></tr>" % (to_time(crs),ntpath.basename(self.crash[crs][0]),self.crash[crs][1])
         return ret
+
     def get_crash_info(self):
         self.update_crash_info()
         ret = ''
         for crs in sorted(self.crash, reverse=True):
-            if self.crash[crs][1] != 'Timeout' and self.crash[crs][1] !=  'No crash':
+            if self.crash[crs][1] != 'Timeout' and self.crash[crs][1] != 'No crash':
                 ret += "<tr><td>%s</td><td>%s</td><td>%s</td><td>%s</td></tr>" % (self.path.split('/')[-2],to_time(crs),ntpath.basename(self.crash[crs][0]),self.crash[crs][1])
         return ret
-
-
 
 #Simple Http server reponse get
 class MyHandler(SimpleHTTPRequestHandler):
@@ -344,7 +345,7 @@ class MyHandler(SimpleHTTPRequestHandler):
 
                 for afl in lafl:
                     s.wfile.write(afl.get_crash_info())
-                    s.wfile.write(web_end)
+                s.wfile.write(web_end)
                 return
 
             if s.path.endswith('.info'):
