@@ -81,9 +81,7 @@ class Afl():
                     pass
                 
                 elif not len(self.crash) or fname not in [t[0] for t in self.crash.values()]:
-                    
                     #print "Scanning",fname
-                    
                     command = Command(self.cmd,fname)
                     command.run(timeout = 1)
                     if not command.timeout:
@@ -96,7 +94,6 @@ class Afl():
                                 self.crash[os.path.getmtime(fname)] = (fname,"No crash")
                     else:
                         self.crash[os.path.getmtime(fname)] = (fname,"Timeout")
-                    #print "DONE", [t[0] for t in self.crash.values()]
                 else:
                     pass
 
@@ -128,17 +125,18 @@ class Afl():
     def get_queue(self):
         ret = ''
         
-        list_of_files = glob.glob(self.path + '/queue/*') # * means all if need specific format then *.csv
-        latest_file = max(list_of_files, key=os.path.getctime)
+        #list_of_files = glob.glob(self.path + '/queue/*') # * means all if need specific format then *.csv
         
-        if not self.infname:
-            for fname in list_of_files:
-                if 'id:000000,orig' in fname:
-                    self.infname = fname
-                    self.indata = fread(fname)
+        #latest_file = max(list_of_files, key=os.path.getctime)
+        infname = glob.glob(self.path + '/queue/*id:000000,orig*')[0]
+        latest_file = glob.glob((self.path + '/queue/*id:' + '{:06d}'.format(int(self.paths_total) - 1) + '*'))[0]
 
-        ret += "<tr><td>"+ self.infname +"</td><td><pre><code>" + self.indata + "</code></pre></td>"
+        print infname,latest_file
+        indata = fread(infname)
+        data = fread(latest_file)
+        
 
+        ret += "<tr><td>"+ infname +"</td><td><pre><code>" + indata + "</code></pre></td>"
         data = fread(latest_file)
         ret += "<tr><td>"+ latest_file +"</td><td><pre><code>" + data + "</code></pre></td>"
         return ret
