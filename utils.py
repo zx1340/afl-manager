@@ -154,4 +154,4 @@ def get_fz_name(cmd):
     for i in range(len(dataspl)):
         if dataspl[i] == '-T':
             return dataspl[i + 1]
-    return cmd.split('--')[1]
+    return cmd.split()[-2]

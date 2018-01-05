@@ -35,8 +35,7 @@ class MyHandler(SimpleHTTPRequestHandler):
             return
         
         elif self.headers.getheader('Authorization') == 'Basic '+key:
-            #SimpleHTTPRequestHandler.do_GET(s)
-            #pass
+            #Load css file
             if self.path.endswith(".css"):
                 f = open(self.path[1:])
                 self.send_response(200)
@@ -45,7 +44,8 @@ class MyHandler(SimpleHTTPRequestHandler):
                 self.wfile.write(f.read())
                 f.close()
                 return
-
+            
+            #Crash monitor page
             if self.path == '/crashes':
                 self.send_response(200)
                 self.send_header("Content-type", "text/html")
@@ -58,7 +58,8 @@ class MyHandler(SimpleHTTPRequestHandler):
                     self.wfile.write(afl.get_crash_info())
                 self.wfile.write(web_end)
                 return
-
+            
+            #get fuzzer info from fuzzer id (hostname:port/10000.info)
             if self.path.endswith('.info'):
                 self.send_response(200)
                 self.send_header("Content-type", "text/html")
@@ -75,9 +76,11 @@ class MyHandler(SimpleHTTPRequestHandler):
                         self.wfile.write('<h1 onclick="window.history.go(-1); return false;">' + os.path.abspath(afl.path) + '</h1>')
                         self.wfile.write(afl.get_full_crash_info())
                         self.wfile.write(web_end)
-                        self.wfile.write(finfo_start)
-                        self.wfile.write(afl.get_queue())
-                        self.wfile.write(finfo_end)
+
+                        if SHOW_QUEUE:
+                            self.wfile.write(finfo_start)
+                            self.wfile.write(afl.get_queue())
+                            self.wfile.write(finfo_end)
                         return
                 self.wfile.write("<h1>There is nothing here</h1>")
                 return
@@ -98,18 +101,29 @@ class MyHandler(SimpleHTTPRequestHandler):
         self.wfile.write(web_end)
 
 
+
+SHOW_QUEUE = False
+
 #need parent folder of afl output folder
 #-b is option using asan to recheck crash
+
 parser = argparse.ArgumentParser(description='AFL Manager')
 parser.add_argument('-i', action="store", dest="source", required=True, help='Parent directory of AFL')
 parser.add_argument('-b', action="store", dest="binary", required=False,help="binary ")
 parser.add_argument('-a', action="store", dest="authen", required=True,help="Authencation user:pass")
+parser.add_argument("-q","--queue", help="Show queue", action="store_true")
+
 args = parser.parse_args()
 
 source = args.source
+
 cmd = args.binary if args.binary else None
 
 key = base64.b64encode(args.authen)
+
+if args.queue:
+    print "Queue data will show up"
+    SHOW_QUEUE = True
 
 if not cmd:
     print("[*]No input binary, using afl info at default")

@@ -1,4 +1,5 @@
 from utils import *
+from analysis import *
 import ntpath
 
 
@@ -46,8 +47,10 @@ class Afl():
         
         parent_cmd  = os.path.split(self.path)[0]
         if not self.cmd:
-            self.cmd = os.path.join(parent_cmd, self.command_line.split('--')[1].replace(' ','').replace('@@',''))
-
+            if '--' in self.command_line:
+                self.cmd = os.path.join(parent_cmd, self.command_line.split('--')[1].replace(' ','').replace('@@',''))
+            else:
+                self.cmd = os.path.join(parent_cmd,self.command_line.split()[-2])
 
 
     def get_build_info(self):
@@ -125,18 +128,30 @@ class Afl():
     def get_queue(self):
         ret = ''
         
-        #list_of_files = glob.glob(self.path + '/queue/*') # * means all if need specific format then *.csv
-        
+        list_of_files = glob.glob(self.path + '/queue/*') # * means all if need specific format then *.csv
         #latest_file = max(list_of_files, key=os.path.getctime)
+
+
         infname = glob.glob(self.path + '/queue/*id:000000,orig*')[0]
-        latest_file = glob.glob((self.path + '/queue/*id:' + '{:06d}'.format(int(self.paths_total) - 1) + '*'))[0]
+        #latest_file = glob.glob((self.path + '/queue/*id:' + '{:06d}'.format(int(self.paths_total) - 1) + '*'))[0]
 
-        print infname,latest_file
-        indata = fread(infname)
-        data = fread(latest_file)
-        
+        analysis = Analysis(list_of_files,'{:06d}'.format(int(self.paths_total) - 1))
 
-        ret += "<tr><td>"+ infname +"</td><td><pre><code>" + indata + "</code></pre></td>"
-        data = fread(latest_file)
-        ret += "<tr><td>"+ latest_file +"</td><td><pre><code>" + data + "</code></pre></td>"
+        queue_tree = analysis.get_queue_tree()
+
+        for queue in queue_tree:
+            ret += "<tr><td>"+ queue.name +"</td><td><pre><code>" + queue.data + "</code></pre></td>"
+
+        # print infname,latest_file
+        # indata = fread(infname)
+        # data = fread(latest_file)
+
+        #     ret += "<tr><td>"+ infname +"</td><td><pre><code>" + indata + "</code></pre></td>"
+        #     data = fread(latest_file)
+        #     ret += "<tr><td>"+ latest_file +"</td><td><pre><code>" + data + "</code></pre></td>"
         return ret
+
+
+if __name__ == "__main__":
+    afl = Afl('../afl/out')
+    print afl.get_queue()
