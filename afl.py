@@ -1,14 +1,28 @@
 from utils import *
 from analysis import *
 import ntpath
+import subprocess
+import time
+import psutil
+import logging
+
+logger = logging.getLogger(__name__)
+hdlr = logging.FileHandler('server.log')
+formatter = logging.Formatter('%(asctime)s %(levelname)s %(message)s')
+hdlr.setFormatter(formatter)
+logger.addHandler(hdlr) 
+logger.setLevel(logging.INFO)
 
 
 #Read from afl output folder and gen html 
 class Afl():
-    def __init__(self,path,cmd = None):
-        print "-"*4,path
+    def __init__(self,binary,indir,outdir,dictionary,cmd = None):
+        self.binary = binary
+        self.indir = indir
+        self.outdir = outdir
+        self.dictionary = dictionary
         self.infname = ''
-        self.path = path
+        self.path = self.outdir
         self.crash = {}
         self.start_time = None
         self.last_update = None
@@ -18,15 +32,16 @@ class Afl():
         self.last_crash = None
         self.fuzzer_pid = None
         self.cmd = cmd 
-        self.update_build_info()
-        self.update_crash_info()
-
+       
     def update_build_info(self):
-        fuzzer_stat_path = self.path + '/fuzzer_stats'
+        fuzzer_stat_path = os.getcwd()+"/" + self.path + '/fuzzer_stats'
+        if not os.path.exists(fuzzer_stat_path):
+            logger.error("File not exit: %s",fuzzer_stat_path)
+            return False
 
         with open(fuzzer_stat_path,'r') as f:
             data = f.read().split('\n')
-
+        #logger.info(data)
         for line in data:
             if 'start_time' in line:
                 self.start_time = int(line.split(':')[1])
@@ -52,14 +67,38 @@ class Afl():
             else:
                 self.cmd = os.path.join(parent_cmd,self.command_line.split()[-2])
 
+        return True
+
+    def is_stop(self):
+        return True if (int(time.time() - self.last_update)) > 240 or self.execs_per_sec == "0.00" else False
+
+    def kill_afl(self):
+        for proc in psutil.process_iter():
+            if proc.name() == 'afl-fuzz':
+                try:
+                    if 'worker_' + self.outdir in proc.cmdline():
+                        proc.kill()
+                        print "process",proc.name,"killed"
+                except:
+                    print "zombie process"
 
     def get_build_info(self):
         self.update_build_info()
         runtime = ms_d(self.last_update - self.start_time)
-        last_crash = l_crs(self.last_update - self.last_crash) if self.last_crash  else 'Not yet'
+        last_crash = l_crs(self.last_update - self.last_crash) if self.last_crash else 'Not yet'
         name = get_fz_name(self.command_line)
-        #5 min no update mean stopped 
-        status = '[Running]' if (int(time.time()  - self.last_update)) < 300 else '<font color="red">[STOPPED]</font>'
+        #restart this afl if it stop
+        if self.is_stop():
+            logger.info("Worker %s stopped",name)
+            self.kill_afl()
+            #Set new output directory
+            self.outdir = self.outdir+"x"
+            self.fuzzer_start()
+            time.sleep(1)
+            self.update_build_info()
+            self.update_crash_info()
+            logger.info("New Worker %s started",self.fuzzer_pid)
+        status = '[Running]' if not self.is_stop() else '<font color="red">[STOPPED]</font>'
         return ("<tr>" + table_construct(name,\
                                         runtime,\
                                         self.execs_per_sec,\
@@ -82,7 +121,6 @@ class Afl():
                 #     print [t[0] for t in self.crash.values()]
                 if fname.endswith('.txt'):
                     pass
-                
                 elif not len(self.crash) or fname not in [t[0] for t in self.crash.values()]:
                     #print "Scanning",fname
                     command = Command(self.cmd,fname)
@@ -102,7 +140,6 @@ class Afl():
 
     def get_full_crash_info(self):
         self.update_crash_info()
-        
         ret = ''
         for crs in sorted(self.crash, reverse=True):
             #if self.crash[crs][1] != 'Timeout' and self.crash[crs][1] !=  'No crash':
@@ -131,7 +168,6 @@ class Afl():
         list_of_files = glob.glob(self.path + '/queue/*') # * means all if need specific format then *.csv
         #latest_file = max(list_of_files, key=os.path.getctime)
 
-
         infname = glob.glob(self.path + '/queue/*id:000000,orig*')[0]
         #latest_file = glob.glob((self.path + '/queue/*id:' + '{:06d}'.format(int(self.paths_total) - 1) + '*'))[0]
 
@@ -151,6 +187,23 @@ class Afl():
         #     ret += "<tr><td>"+ latest_file +"</td><td><pre><code>" + data + "</code></pre></td>"
         return ret
 
+    #Fuzzer stuff
+    def fuzzer_start(self):
+        args =  ["afl-fuzz"]
+        args += ["-i", self.indir]
+        args += ["-o", self.outdir]
+        args += ["-m", "500"] #default 500mb limit
+        if self.dictionary:
+            args += ["-x", self.dictionary]
+        args += ["-T", "worker_"+self.outdir]
+        args += ["--"]
+        args += [self.binary]
+        args += ["@@"]
+        print args
+        with open(self.outdir+"_outfile", "w") as fp:
+            return subprocess.Popen(args, stdout=fp, close_fds=True)
+
+        
 
 if __name__ == "__main__":
     afl = Afl('../afl/out')

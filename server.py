@@ -6,12 +6,15 @@ from SimpleHTTPServer import SimpleHTTPRequestHandler
 import datetime
 import base64
 import requests
+import psutil
+
 from afl import Afl
 from utils import *
 from data import *
 
 HOST_NAME = '0.0.0.0'
 PORT_NUMBER = 1340
+
 
 #Simple Http server reponse get
 class MyHandler(SimpleHTTPRequestHandler):
@@ -99,50 +102,85 @@ class MyHandler(SimpleHTTPRequestHandler):
         for afl in lafl:
             self.wfile.write(afl.get_build_info())
         self.wfile.write(web_end)
-
-
-
+        
 SHOW_QUEUE = False
 
 #need parent folder of afl output folder
 #-b is option using asan to recheck crash
 
 parser = argparse.ArgumentParser(description='AFL Manager')
-parser.add_argument('-i', action="store", dest="source", required=True, help='Parent directory of AFL')
-parser.add_argument('-b', action="store", dest="binary", required=False,help="binary ")
-parser.add_argument('-a', action="store", dest="authen", required=True,help="Authencation user:pass")
-parser.add_argument("-q","--queue", help="Show queue", action="store_true")
+parser.add_argument('-i', action="store", dest="input_data", required=True, help='input directory with test cases ')
+parser.add_argument('-b', action="store", dest="binary", required=True,help="path to fuzzed_app ")
+parser.add_argument('-c', action="store", dest ="asan_binary",required=False,help="path to asan binary (for re-check)")
+parser.add_argument('-x', action="store", dest ="dictionary",required=True,help="dictionary file")
+parser.add_argument('-a', action="store", dest="authen", required=True,help="authencation with format user:pass")
+parser.add_argument("-q","--queue", help="show queue", action="store_true")
 
 args = parser.parse_args()
 
-source = args.source
+input_data = args.input_data
 
-cmd = args.binary if args.binary else None
+cmd = args.binary
+
+if args.asan_binary:
+    asan_binary = args.asan_binary
+    if not os.path.exists(asan_binary):
+        print "[-]Oops, asan binary seem not exits"
+        sys.exit()
+else:
+    print "[-]Fuzzing without verify crash"
+
+
+if args.dictionary:
+    dictionary = args.dictionary
+else:
+    print "[-]Fuzzing without dictionary"
+    dictionary = None
 
 key = base64.b64encode(args.authen)
 
 if args.queue:
-    print "Queue data will show up"
-    SHOW_QUEUE = True
+        print "[+]Queue data will show up"
+        SHOW_QUEUE = True
+
 
 if not cmd:
+    #if we dont have binary, we wont create new alf
     print("[*]No input binary, using afl info at default")
+    lafl=[]
+    cpu=psutil.cpu_count()
+    for i in range(cpu/2):
+        afl = Afl(cmd,input_data,"sync/out_"+str(i),dictionary,asan_binary)
+        if not afl.update_build_info():
+            print "Unable to get instance"
+        else:
+            afl.update_crash_info()
+            lafl.append(afl)
+
 else:
     if not os.path.exists(cmd):
         print("[-]Oops, binary seem not exists (%s)\ncheck pls",cmd)
         sys.exit()
+        
+    print("Cleaning....")
+    os.system("rm -rf sync/*")
 
-lafl = []
+    if not os.path.exists('sync'):
+        os.mkdir('sync')
 
-print "[+]Getting crash info...."
-if os.path.exists(source):
-    afl_instance = get_afl_instance(source)
-    if not len(afl_instance):
-        print("[-]Oops, afl root folder seem not exists (%s)\ncheck pls",source)
-        sys.exit()
+    print "[*] Creating fuzzer..."
 
-    for afl in afl_instance:
-        lafl.append(Afl(afl,cmd))
+    lafl=[]
+    cpu=psutil.cpu_count()
+    for i in range(cpu/2):
+        afl = Afl(cmd,input_data,"sync/out_"+str(i),dictionary,asan_binary)
+        afl.fuzzer_start()
+        time.sleep(1)
+        if not afl.update_build_info():
+            print "Unable to create instance"
+        else:
+            afl.update_crash_info()
+            lafl.append(afl)
 
 #Start server
 server_class = BaseHTTPServer.HTTPServer
@@ -154,5 +192,3 @@ except KeyboardInterrupt:
     pass
 httpd.server_close()
 print time.asctime(), "Server Stops - %s:%s" % (HOST_NAME, PORT_NUMBER)
-
-
